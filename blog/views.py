@@ -1,6 +1,8 @@
 from taggit.models import Tag
 
-from django.contrib.postgres.search import SearchVector
+from django.contrib.postgres.search import (
+    SearchVector, SearchQuery, SearchRank, TrigramSimilarity
+)
 from django.core.mail import send_mail
 from django.core.paginator import (
     Paginator, EmptyPage, PageNotAnInteger
@@ -96,7 +98,7 @@ def post_share(request, post_id):
         # Form was submitted
         form = EmailPostForm(request.POST)
         if form.is_valid():
-            # From fields passed validation
+            # Form fields passed validation
             cd = form.cleaned_data
             post_url = request.build_absolute_uri(
                 post.get_absolute_url())
@@ -116,7 +118,7 @@ def post_share(request, post_id):
 
 
 def post_search(request):
-    form = SearchFrom()
+    form = SearchForm()
     query = None
     results = []
 
@@ -124,13 +126,21 @@ def post_search(request):
         form = SearchForm(request.GET)
         if form.is_valid():
             query = form.cleaned_date['query']
+            search_vector = SearchVector('title', weight='A') + \
+                            SearchVector('body', weight='B')
+            search_query = SearchQuery(query)
+            #results = Post.published.annotate(search=search_vector,
+            #                                  rank=SearchRanck(search_vector, search_query)
+            #                                 ).filter(rank__gte=0.3).order_by('-rank')
+
+            # when I using this line, I don't need SearchVector, SearchQuery ...
             results = Post.published.annotate(
-                search=SearchVector('title', 'body'),
-            ).filter(search=query)
+                similarity=TrigramSimilarity('title', query),
+            ).filter(similarity__gt=0.1).order_by('-similarity')
 
     return render(request,
                   'blog/post/search.html',
-                  {'from': form,
+                  {'form': form,
                    'query': query,
                    'results': results})
                     
